@@ -33,3 +33,5 @@ md-5 = { version = "0.10.6" }
 strum_macros = { version = "0.25.3" }
 num-traits = { version = "0.2.17" }
 toml = { version = "0.8.8" }
+signal-hook = { version = "0.3.17", features = [] }
+term = { version = "0.7.0", features = [] }

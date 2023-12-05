@@ -4,4 +4,4 @@ pub mod cmn;
 pub mod logic;
 pub mod kafka_listener;
 pub mod entity;
-pub mod log;
+pub mod custom_log;

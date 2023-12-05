@@ -10,7 +10,7 @@ use crate::entity::GaibuShowData;
 
 pub async fn init(
     url:&str,
-) -> Result<Pool<MySql>, Box<dyn std::error::Error>>{
+) -> Result<Pool<MySql>, Box<dyn std::error::Error+ Send + Sync>>{
     let pool = MySqlPoolOptions::new()
         .max_connections(20)
         .connect(&url)
@@ -21,7 +21,7 @@ pub async fn init(
 pub async fn get_gaibu_show_data_by_collection_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     id: i64,
-) -> Result<(Vec<entity::GaibuShowData>, usize), Box<dyn std::error::Error>> {
+) -> Result<(Vec<entity::GaibuShowData>, usize), Box<dyn std::error::Error+ Send + Sync>> {
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let (_r, _c): (Vec<entity::GaibuShowData>, usize) = sqlx::query_as(
         "SELECT * FROM T_GAIBU_SHOW_DATA WHERE COLLECTION_ID = (?) LIMIT 1",
@@ -43,7 +43,7 @@ pub async fn get_gaibu_show_data_by_collection_id(
 pub async fn get_gaibu_show_data_by_app_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     app_id: &str,
-) -> Result<entity::GaibuShowData, Box<dyn std::error::Error>>{
+) -> Result<entity::GaibuShowData, Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let result :entity::GaibuShowData = sqlx::query_as(
         "SELECT * FROM T_GAIBU_SHOW_DATA WHERE APP_ID = (?) LIMIT 1",
@@ -57,7 +57,7 @@ pub async fn get_gaibu_show_data_by_app_id(
 pub async fn remove_gaibu_show_data_by_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     id: &i64,
-) -> Result<(), Box<dyn std::error::Error>>{
+) -> Result<(), Box<dyn std::error::Error+ Send + Sync>>{
 
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let _  = sqlx::query(
@@ -75,7 +75,7 @@ pub async fn get_max_action_by_app_id_and_ext_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     app_id:&str,
     id: i64,
-) -> Result<(entity::Action, usize), Box<dyn std::error::Error>>{
+) -> Result<(entity::Action, usize), Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let sql = r#"
         SELECT *
@@ -104,7 +104,7 @@ pub async fn get_max_action_by_app_id_and_ext_id(
 pub async fn get_max_collection_action_by_app_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     app_id:&str,
-) -> Result<(entity::Action, usize), Box<dyn std::error::Error>>{
+) -> Result<(entity::Action, usize), Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let sql = r#"
         SELECT *
@@ -132,7 +132,7 @@ pub async fn get_max_collection_action_by_app_id(
 pub(crate) async fn insert_gaibu_show_data_by_entity(
     pool: &HashMap<PoolKey, Pool<MySql>>,
     gaibu_show_data: &GaibuShowData,
-) -> Result<(), Box<dyn std::error::Error>>{
+) -> Result<(), Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let sql = r#"
     INSERT INTO
@@ -143,14 +143,12 @@ pub(crate) async fn insert_gaibu_show_data_by_entity(
         OPERATOR_ID,
         ACTION_CODE,
         ACTION_TIME,
-        ACTION_PROMISE_DATE,
         ACTION_MEMO,
         CREATE_TIME,
         UPDATE_TIME
       )
     VALUES
       (
-        (?),
         (?),
         (?),
         (?),
@@ -171,7 +169,6 @@ pub(crate) async fn insert_gaibu_show_data_by_entity(
         .bind(&gaibu_show_data.operator_id)
         .bind(&gaibu_show_data.action_code)
         .bind(&gaibu_show_data.action_time)
-        .bind(&gaibu_show_data.action_promise_date)
         .bind(&gaibu_show_data.action_memo)
     .execute(_pool)
     .await?;
@@ -182,14 +179,13 @@ pub(crate) async fn insert_gaibu_show_data_by_entity(
 pub(crate) async fn update_gaibu_show_data_by_entity_v2(
     pool: &HashMap<PoolKey, Pool<MySql>>,
     gaibu_show_data: &GaibuShowData,
-) -> Result<(), Box<dyn std::error::Error>>{
+) -> Result<(), Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let sql = r#"
     UPDATE
       T_GAIBU_SHOW_DATA
         SET ACTION_CODE = (?),
         ACTION_TIME = (?),
-        ACTION_PROMISE_DATE = (?),
         ACTION_MEMO = (?)
       WHERE APP_ID = (?)
     "#;
@@ -198,7 +194,6 @@ pub(crate) async fn update_gaibu_show_data_by_entity_v2(
     )
         .bind(&gaibu_show_data.action_code)
         .bind(&gaibu_show_data.action_time)
-        .bind(&gaibu_show_data.action_promise_date)
         .bind(&gaibu_show_data.action_memo)
         .bind(&gaibu_show_data.app_id)
         .execute(_pool)
@@ -209,7 +204,7 @@ pub(crate) async fn update_gaibu_show_data_by_entity_v2(
 pub(crate) async fn delete_gaibu_show_data_by_collection_id(
     pool:&HashMap<cmn::PoolKey, Pool<MySql>>,
     id: i64,
-) -> Result<(), Box<dyn std::error::Error>>{
+) -> Result<(), Box<dyn std::error::Error+ Send + Sync>>{
     let _pool = pool.get(&cmn::PoolKey::NakatoroPool).unwrap();
     let _  = sqlx::query(
     "DELETE FROM T_GAIBU_SHOW_DATA WHERE COLLECTION_ID = (?)",

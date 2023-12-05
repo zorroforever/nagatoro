@@ -32,7 +32,7 @@ pub fn get_env_file() -> String {
 }
 
 impl AppConfig {
-    pub async fn get_config() -> Result<AppConfig, Box<dyn std::error::Error>>{
+    pub async fn get_config() -> Result<AppConfig, Box<dyn std::error::Error+ Send + Sync>>{
         let config_file = get_env_file();
         let settings = Config::builder()
             .add_source(File::new(&config_file, FileFormat::Yaml))

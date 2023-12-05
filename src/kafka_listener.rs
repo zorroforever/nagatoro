@@ -1,13 +1,12 @@
-use std::collections::{HashMap, HashSet};
-
+use std::collections::HashSet;
+use std::sync::Arc;
 use log::{info, warn};
 use rdkafka::{ClientConfig, ClientContext, Message, TopicPartitionList};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::error::KafkaResult;
-use sqlx::{MySql, Pool};
-
+use tokio::sync::RwLock as AsyncRwLock;
+use crate::logic;
 use crate::config::AppConfig;
-use crate::{cmn, logic};
 
 #[derive(Default)]
 struct CustomConsumerContext {
@@ -16,14 +15,12 @@ struct CustomConsumerContext {
 }
 
 impl CustomConsumerContext {
-
     fn add_offset(&mut self, topic: String, offset: i64) {
         if self.processed_offsets.len() > self.max_offsets_capacity {
             self.clean_up_offsets();
         }
         self.processed_offsets.insert((topic, offset));
     }
-
     fn clean_up_offsets(&mut self) {
         self.processed_offsets.clear();
     }
@@ -47,19 +44,16 @@ impl ConsumerContext for CustomContext {
     }
 }
 
-type LoggingConsumer = StreamConsumer<CustomContext>;
+pub type LoggingConsumer = StreamConsumer<CustomContext>;
 
-pub async fn init(
-    app_config: &AppConfig,
-    db_pool: &HashMap<cmn::PoolKey, Pool<MySql>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut custom_consumer_context = CustomConsumerContext {
-        processed_offsets: HashSet::new(),
-        max_offsets_capacity: 20000,
-    };
+pub async fn kafka_listener(
+    consumer: Arc<AsyncRwLock<Option<LoggingConsumer>>>,
+) {
+    let app_config = AppConfig::get_config().await.unwrap();
     let topic_str = app_config.kafka_topic.clone();
     let context = CustomContext;
-    let consumer: LoggingConsumer = ClientConfig::new()
+
+    let kafka_consumer:LoggingConsumer  = ClientConfig::new()
         .set("group.id", &app_config.kafka_job_group_id)
         .set("bootstrap.servers", &app_config.kafka_brokers)
         .set("enable.auto.commit", &app_config.kafka_enable_auto_commit)
@@ -69,11 +63,18 @@ pub async fn init(
         .create_with_context(context)
         .expect("Consumer creation failed");
 
-    consumer
+    kafka_consumer
         .subscribe(&[&topic_str])
-        .expect("Subscribe failed");
+        .expect("Can't subscribe to specified topics");
+
+
+    consumer.write().await.replace(kafka_consumer);
+    let mut custom_consumer_context = CustomConsumerContext {
+        processed_offsets: HashSet::new(),
+        max_offsets_capacity: 20000,
+    };
     loop {
-        match consumer.recv().await {
+        match consumer.read().await.as_ref().unwrap().recv().await {
             Err(e) => warn!("Kafka error: {}", e),
             Ok(m) => {
                 let payload = match m.payload_view::<str>() {
@@ -84,21 +85,18 @@ pub async fn init(
                         ""
                     }
                 };
-                let _key = m.key().map(|k| k.to_owned());
-                let _value = m.payload().map(|p| p.to_owned());
+                info!("key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+                      m.key(), payload, m.topic(), m.partition(), m.offset(), m.timestamp());
                 let offset = m.offset();
-                info!("key: {}, payload: {}, topic: {}, partition: {}, offset: {}, timestamp: {:?}",
-                      String::from_utf8_lossy(m.key().unwrap()), payload, m.topic(), m.partition(), m.offset(), m.timestamp());
                 if custom_consumer_context.processed_offsets.contains(&(String::from(&topic_str), offset)) {
                     info!("Skipping duplicate message at offset:{}", offset);
                     continue; // jump
                 }
-                logic::process_message(&payload, db_pool).await.unwrap();
+                if let Ok(_) = logic::process_message(payload).await {
+                    info!("process message ok");
+                }
                 custom_consumer_context.add_offset(String::from(&topic_str), offset);
-                consumer
-                    .commit_message(&m, CommitMode::Async)
-                    .expect("Failed to commit offset");
-                info!("End process at offset:{}", offset);
+                consumer.read().await.as_ref().unwrap().commit_message(&m, CommitMode::Async).unwrap();
             }
         };
     }
