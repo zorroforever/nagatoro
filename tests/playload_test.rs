@@ -35,6 +35,6 @@ pub async fn t2(){
     if let Ok(_v) = db::init(&url2).await {
         pools.insert(cmn::PoolKey::TukinashiPool, _v);
     }
-    process_message(s,&pools).await.unwrap();
+    process_message(&pools,s).await.unwrap();
 }
 
