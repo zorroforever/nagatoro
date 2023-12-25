@@ -1,32 +1,33 @@
 use std::collections::HashMap;
-
+use std::sync::Arc;
 use log::{error, info, warn};
 use serde_json::Value;
 use sqlx::{MySql, Pool};
-
+use tokio::sync::RwLock;
 use crate::{cmn, db, entity};
 use crate::cmn::PoolKey;
 use crate::config::AppConfig;
 
 pub async fn init_db(
     app_config: &AppConfig,
-) -> Result<HashMap<PoolKey,Pool<MySql>>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut pools = HashMap::new();
+    db_pool_map: Arc<RwLock<HashMap<PoolKey, Pool<MySql>>>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut pools = db_pool_map.write().await;
     if let Ok(_v) = db::init(&app_config.database_nagatoro_url).await {
         pools.insert(cmn::PoolKey::NakatoroPool, _v);
     } else {
         error!("nagatoro url init error");
-        return Ok(pools);
     }
     if let Ok(_v) = db::init(&app_config.database_tukinashi_url).await {
         pools.insert(cmn::PoolKey::TukinashiPool, _v);
     } else {
         error!("tukinashi url init error");
-        return Ok(pools);
+
     }
-    Ok(pools)
+    Ok(())
 }
 pub async fn process_message(
+    db_pool: &HashMap<cmn::PoolKey, Pool<MySql>>,
     play_load: &str,
 ) -> Result<(), Box<dyn std::error::Error+ Send + Sync>> {
     let json_playload: serde_json::Value = serde_json::from_str(play_load).unwrap();
@@ -34,8 +35,6 @@ pub async fn process_message(
     let f_table_name = json_playload["tableName"].as_str().unwrap();
     let f_bf = &json_playload["beforeData"];
     let f_af = &json_playload["afterData"];
-    let app_config = AppConfig::get_config().await?;
-    let db_pool = init_db(&app_config).await?;
     match f_table_name {
         "T_POOL" => {
             if let Ok(_) = process_pool(f_type, f_bf, f_af, &db_pool).await{

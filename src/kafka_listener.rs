@@ -1,11 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use log::{info, warn};
 use rdkafka::{ClientConfig, ClientContext, Message, TopicPartitionList};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::error::KafkaResult;
+use sqlx::{MySql, Pool};
 use tokio::sync::RwLock as AsyncRwLock;
-use crate::logic;
+use crate::{cmn, logic};
 use crate::config::AppConfig;
 
 #[derive(Default)]
@@ -48,6 +49,7 @@ pub type LoggingConsumer = StreamConsumer<CustomContext>;
 
 pub async fn kafka_listener(
     consumer: Arc<AsyncRwLock<Option<LoggingConsumer>>>,
+    db_pool: Arc<AsyncRwLock<HashMap<cmn::PoolKey, Pool<MySql>>>>,
 ) {
     let app_config = AppConfig::get_config().await.unwrap();
     let topic_str = app_config.kafka_topic.clone();
@@ -92,7 +94,8 @@ pub async fn kafka_listener(
                     info!("Skipping duplicate message at offset:{}", offset);
                     continue; // jump
                 }
-                if let Ok(_) = logic::process_message(payload).await {
+                let pool = db_pool.read().await.to_owned();
+                if let Ok(_) = logic::process_message(&pool,payload).await {
                     info!("process message ok");
                 }
                 custom_consumer_context.add_offset(String::from(&topic_str), offset);
