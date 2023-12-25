@@ -27,7 +27,7 @@ impl CustomConsumerContext {
     }
 }
 
-struct CustomContext;
+pub struct CustomContext;
 
 impl ClientContext for CustomContext {}
 
